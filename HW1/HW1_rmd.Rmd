@@ -1,0 +1,182 @@
+---
+title: "HW1"
+author: "Sercan Böçkün 2019402123"
+date: '2022-04-08'
+output: html_document
+---
+## 0. Importing Required Packages and Setting the Working Directory
+
+```{r setup}
+require(data.table)
+require(lubridate)
+require(forecast)
+require(ggplot2)
+require(skimr)
+require(GGally)
+require(readxl)
+require(ggcorrplot)
+library(xts)
+library("readxl")
+setwd("C:/Users/serca/OneDrive/Masaüstü/Spring 22'/IE 360/HW1")
+```
+
+## 1. Introduction
+Exports and imports are the fundamental economic activities of a nation and determines the account deficit of the total economy. Turkey, an emerging market in between the Europe and Asia, has a somewhat fluctuating local currency and the economical growth heavily depends on its foreign trades. Turkey's recently growing export data attracts attention from the global economists and analysts. In this work, it will be studied how exports affects the financial situation of the companies by looking at the "total export receivables" data. Turkey's geographical diversification provides valuable mining fields and attracts tourist around the globe. The data of Gold Mining/Production of the country in KG's is available and the hypothesis that the total exports and the export receivables data on companies financial statement is correlated with the gold mining activities will be tested. Lastly Koza Altin Isletmeleri AS. is the largest gold producer in Turkey and is listed on Borsa İstanbul with the code of KOZAL. With the hypothesis that the volatility of the stock price on BIST depends on the real economic activities of the Koza Altin Isletmeleri AS., whether the search trend data for the İST:KOZAL topic is also correlated with the Total Exports, Export Receivables and the Gold Production in KG's will be tested.
+
+## 2. Reading the Data, Merging the Data Tables and Creating a Time Series Object 
+The data of Total Exports in Thousand USD's, Export Receivables in Million USD's, Monthly Gold Production in KG's and the Google Search Trends for the KOZAL is merged into a single data table.
+
+```{r cars}
+setwd("C:/Users/serca/OneDrive/Masaüstü/Spring 22'/IE 360/HW1")
+total_exports = read_excel("Total_Exports.xlsx")
+total_exports = data.table(total_exports)
+
+export_receivables = read_excel("Export_Receivables.xlsx")
+export_receivables = data.table(export_receivables)
+
+gold_production = read_excel("Gold_Production_KG.xlsx")
+gold_production = data.table(gold_production)
+
+google_trends_koza = read.csv("KOZAL_Google_Trends.csv")
+google_trends_koza = data.table(google_trends_koza)
+
+
+export_table = merge(total_exports, export_receivables)
+data_ = merge(export_table, gold_production)
+data = merge(data_, google_trends_koza)
+data$Date <- as.Date(as.yearmon(x = data$Date))
+colnames(data) <- c("Date","Total_Export", "Export_Receivables", "Gold_Production_KG", "Google_Trends_Koza")
+data$Google_Trends_Koza <- as.numeric((data$Google_Trends_Koza))
+#data<-data[,c(2,3,4)]
+str(data)
+
+#data_xts <- xts(data[ , colnames(data) != "Date"], data$Date)
+data_xts = xts(x = data, data$Date)
+
+str(data_xts)
+```
+
+## 3. Plottings
+
+## 3.1 Plotting the Monthly Total Exports in Thousand USD
+
+```{r plot1}
+ggplot(data,aes(x=Date))+
+  geom_line(size=1,color="brown",aes(y=Total_Export,group =1))+
+  ggtitle("Monthly Total Exports in Thousand USD")
+
+
+```
+
+## 3.2 Plotting the Monthly Export Receivables in Million USD
+
+```{r plot2}
+
+ggplot(data,aes(x=Date))+
+  geom_line(size=1,color="brown",aes(y=Export_Receivables,group =1))+
+  ggtitle("Monthly Export_Receivables in Million USD")
+
+
+```
+
+## 3.3 Plotting the Monthly Gold Mining of Public Companies in KG's
+```{r plot3}
+
+
+ggplot(data,aes(x=Date))+
+  geom_line(size=1,color="brown",aes(y=Gold_Production_KG,group =1))+
+  ggtitle("Monthly Gold Mining of Public Companies in KG's")
+
+
+```
+
+## 3.4 Plotting the Monthly Google Search Trend for the KOZAL
+```{r plot4}
+
+
+ggplot(data,aes(x=Date))+
+  geom_line(size=1,color="brown",aes(y=Google_Trends_Koza,group =1))+
+  ggtitle("Monthly Google Search Trend for the KOZAL")
+
+```
+
+## 3.5 Plotting the Normalized Datas on a Single Graph
+```{r plot5}
+
+tmp=copy(data)
+
+tmp$Total_Export_Normalized=(tmp$Total_Export-min(tmp$Total_Export))/(max(tmp$Total_Export)-min(tmp$Total_Export))
+
+tmp$Export_Receivables_Normalized=(tmp$Export_Receivables-min(tmp$Export_Receivables))/(max(tmp$Export_Receivables)-min(tmp$Export_Receivables))
+
+tmp$Gold_Production_KG_Normalized=(tmp$Gold_Production_KG-min(tmp$Gold_Production_KG))/(max(tmp$Gold_Production_KG)-min(tmp$Gold_Production_KG))
+
+
+ggplot(tmp)+geom_line(aes(x=Date, y=Total_Export_Normalized,color="Total_Export_Normalized"))+
+  geom_line(aes(x=Date, y=Export_Receivables_Normalized ,color="Export_Receivables_Normalized"))+
+  geom_line(aes(x=Date, y=Gold_Production_KG_Normalized , color= "Gold_Production_KG_Normalized"))+
+  ggtitle("Comparision of Normalized Datas")+
+  ylab("Normalized Values")+xlab("Date (Monthly)")
+
+```
+
+## 4. Correlation of the data
+
+## 4.1 Plotting the correlation with ggpairs()
+```{r corr1}
+ggpairs(data)
+
+
+```
+
+On the diagonal of the matrix densities of the data is visualized. While the Total Exports data is somewhat normally distributed, Export Receivables, Gold Production and the search trend for KOZAL have a similar behaviour of a f-distribution with varying parameters. It can be easily seen from the scatter table of Total Exports and Export Receivables that these two data has a positive linearity with each other. On the next section correlation information will be discussed in detail.
+
+```{r corr2}
+
+corr_data = data[,c(2,3,4,5)]
+
+correl_info=cor(corr_data)
+
+ggcorrplot(correl_info, 
+           hc.order = TRUE, 
+           type = "lower",
+           lab = TRUE)
+
+
+#lm_base=lm(Total_Export~ Google_Trends_Koza+Gold_Production_KG + Export_Receivables,data)
+#summary(lm_base)
+
+#checkresiduals(lm_base$residuals)
+
+#checkresiduals(lm_base)
+
+
+#tmp=copy(data)
+#tmp[,actual:=Total_Export]
+#tmp[,predicted_trend:=predict(lm_base,tmp)]
+#tmp[,residual_trend:=actual-predicted_trend]
+#head(tmp)
+#ggplot(tmp ,aes(x=Date)) +
+#  geom_line(aes(y=actual,color='real')) + 
+#  geom_line(aes(y=predicted_trend,color='predicted'))
+
+```
+
+## 5. Comments on the Findings of the Correlation Matrix
+Looking at the last plot of the correlation matrix, it can be seen that Export Receivables data on the financial reports of the companies are heavily correlated with the total exports of the economy. The correlation value between them is 0.87. On the other hand Gold Production in KG's has a correlation value of 0.48 and 0.49 between the Total Exports and Export Receivables respectively. Surprisingly the trend for the topic of KOZAL has a higher correlation with Total Exports and Export Receivables than Gold Production in KG's and the values are 0.63 and 0.64 respectively. Lastly the correlation between the KOZAL search trend and the Gold Production is 0.35.
+
+The strong correlation between the Export Receivables on the financial reports and the actual Exports is not surprising. Accountants of a company records every activity on the financial reports. After an export, if the company sent the product but has not received the money immediately, the amount is recorded to the financial report as "Export Receivable" in order to balance the net worth of the company. Correlation of 0.87 indicates this finding. 
+
+One might easily have the assumption that majority of the mining activities are resulted with exports to the other countries. At the beginning of the research we had the hypothesis that gold production and exports would be highly correlated. Contrary to our assumption, correlation value of 0.48 indicates that gold production in kg's and the exports are somewhat and moderately correlated rather than strongly. Even though this research doesn't include the linear regression modelling, the Adjusted R square metric of a model, created with only one feature which is gold production in kg's and the predicted value is the total export of the country, is around 0.25. This score is very low for a regression model. However in a multi-linear regression model, it would be wise to include gold production kg's, export receivables and even the google search trend for the KOZAL. 
+
+Google Trends data for the KOZAL tells whole another story to us. Contrary to our general expectation, correlation between the gold production and the google search trend for the KOZAL is only 0.35. However the value of 0.63 for the correlation between the KOZAL and the total exports is surprising and very intriguing. This value opens door to further research topics that would analyze this behavior. One reason for the high correlation can be that reports of increase or decrease in exports may have an effect on the volatility of the stock market, thus the individual investors interest would increase to the search term for the KOZAL.
+
+## 6. Conclusion
+
+Starting the research we had two main assumptions: 
+- The total exports and gold production are correlated.
+- Volatility and naturally the interest for the search term of KOZAL depends on the real activities of the company.
+
+The reliability of our first assumption is somewhat proved with the result of "moderate correlation" output from the correlation matrix. The lack of strong correlation can be explained with the lag between the production of a gold and the export of the gold. 
+
+Our second assumption ended up with further new research topics. The correlation value of 0.35 is contrary to the assumption that interest of the individuals on a company's stock price depends on the real-time activities of the company. However Total Exports and search trend have the correlation value of 0.63 which is even higher than the correlation between the Total Exports and Gold Production. This is a very intriguing phenomena and might have several reasons. One might be the affect of the export reports on the volatility of the stock markets which results to increase in the interest of the individuals in the stock prices. As stated this behavior should be studied further upon the completion of this research. 
