@@ -3,7 +3,7 @@
 
 ### Homework 1
 Link for the HW1 .R file:
-[link](https://github.com/BU-IE-360/spring22-sercanbockun/blob/gh-pages/HW1/HW1_2019402123_Sercan_Bockun.R)
+[link](https://github.com/BU-IE-360/spring22-sercanbockun/blob/gh-pages/HW1/HW1_Sercan_Bockun.R)
 
 Link for the HW1 html file: 
 [HW1](/HW1/HW1_html.html)
