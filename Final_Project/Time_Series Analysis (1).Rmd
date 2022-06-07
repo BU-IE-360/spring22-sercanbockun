@@ -1,0 +1,211 @@
+---
+title: "Time Series Analysis Approach"
+output: html_notebook
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r}
+require(data.table)
+require(tidyverse)
+require(lubridate)
+require(forecast)
+require(GGally)
+require(RcppRoll)
+require(skimr)
+require(zoo)
+require(urca)
+```
+
+## Data Preprocessing and Exploration
+
+```{r}
+weather_data <- read.csv("./data/long_weather.csv")
+weather_data <- data.table(weather_data)
+weather_data <- dcast(weather_data,
+                      date + hour ~ variable + lat + lon,
+                      value.var = "value")
+weather_data[,datetime:=ymd(date) + dhours(hour)]
+weather_data <- subset(weather_data, select = -c(date, hour))
+head(weather_data)
+```
+
+```{r}
+prod_data <- read.csv("./data/production.csv")
+prod_data <- data.table(prod_data)
+prod_data[,datetime:=ymd(date) + dhours(hour)]
+prod_data <- subset(prod_data, select = -c(date))
+data <- left_join(x     = prod_data,
+                  y     = weather_data,
+                  by    = "datetime")
+tail(data, 20)
+```
+
+```{r}
+skim(data)
+```
+
+```{r}
+ggplot(data, aes(x = datetime, y = production)) +
+    geom_line()
+```
+
+## Stationarity Check
+
+### Visual Check with Rolling Plots
+
+```{r}
+time_window <- 720 # 30 days
+mean_series <- roll_mean(data$production, time_window, align='left')
+var_series <- roll_var(data$production, time_window, align='left')
+autocor_series <- rollapply(data$production, width=time_window, FUN=acf, lag.max=1, type="correlation", plot=FALSE)
+autocor_series <- unlist(autocor_series[, 1])
+autocor_series <- autocor_series[c(FALSE, TRUE)]
+```
+
+```{r}
+plot(mean_series,
+     type = 'l',
+     col = 'red',
+     xlab = "time (t)",
+     ylab = "Rolling Mean",
+     main = "Mean series")
+
+plot(var_series,
+     type = 'l',
+     col = 'red',
+     xlab = "time (t)",
+     ylab = "Rolling Variance",
+     main = "Variance series")
+
+plot(autocor_series,
+     type = 'l',
+     col = 'red',
+     xlab = "time (t)",
+     ylab = "Rolling ACF",
+     main = "Autocorrelation (lag 1) series")
+```
+
+Mean, variance and autocorrelation of the data changes with respect to time.
+
+### KPSS Unit Root Test
+
+```{r}
+summary(ur.kpss(data$production))
+```
+
+Very high value, definitely non-stationary.
+
+```{r}
+acf(data$production)
+```
+
+```{r}
+pacf(data$production)
+```
+
+## 24-lag differencing
+
+```{r}
+data[, lag_24:=production-shift(production, 24)]
+tail(data, 30)
+```
+
+```{r}
+ggplot(data, aes(x = datetime, y = lag_24)) +
+    geom_line()
+```
+
+```{r}
+time_window <- 720
+mean_series <- roll_mean(data$lag_24, time_window, align='left')
+var_series <- roll_var(data$lag_24, time_window, align='left')
+autocor_series <- rollapply(data$lag_24[!is.na(data$lag_24)], width=time_window, FUN=acf, lag.max=1, type="correlation", plot=FALSE)
+autocor_series <- unlist(autocor_series[, 1])
+autocor_series <- autocor_series[c(FALSE, TRUE)]
+```
+
+```{r}
+plot(mean_series,
+     type = 'l',
+     col = 'red',
+     xlab = "time (t)",
+     ylab = "Rolling Mean",
+     main = "Mean series")
+
+plot(var_series,
+     type = 'l',
+     col = 'red',
+     xlab = "time (t)",
+     ylab = "Rolling Variance",
+     main = "Variance series")
+
+plot(autocor_series,
+     type = 'l',
+     col = 'red',
+     xlab = "time (t)",
+     ylab = "Rolling ACF",
+     main = "Autocorrelation (lag 1) series")
+```
+
+```{r}
+summary(ur.kpss(data$lag_24))
+```
+
+Plot of the 24-lagged differences versus time index, rolling mean, variance and autocorrelation, and KPSS unit test root test results all show the improvement in the stationarity.
+
+```{r}
+acf(data[!is.na(data$lag_24), lag_24])
+```
+
+The number of lags with autocorrelations with out of confidence intervals have decreased. An "exponential decay" in lags < 10, and a half-wave pattern with trough at 25 are visible.
+
+```{r}
+pacf(data[!is.na(data$lag_24), lag_24])
+```
+
+The number of lags that are out of confidence intervals have decreased also. High peaks with 1 and 25 may be signaling a necessity of AR(1) term in an ARIMA model.
+
+## Decomposition of the Time Series
+
+```{r}
+prod_24_ts_dc <- decompose(ts(data$production, frequency=24))
+plot(prod_24_ts_dc)
+```
+
+## ARIMA Model with 24 lags
+
+```{r}
+fitted_arima <- auto.arima(data$lag_24, seasonal=F, trace=T, stepwise=F, approximation=F)
+```
+
+```{r}
+fitted_arima
+```
+
+## ARIMAX Model with 24 lags
+
+### Preparing the Regressors (Differenced Weather Data)
+
+```{r}
+head(data - shift(data, 24), 50)
+```
+
+```{r}
+data_24_lag <- data - shift(data, 24)
+data_24_lag <- data_24_lag[!is.na(data_24_lag$lag_24)]
+data_24_lag_mat <- data.matrix(subset(data_24_lag, select = -c(hour, production, datetime, lag_24)))
+str(data_24_lag_mat)
+```
+
+```{r}
+fitted_arimax <- auto.arima(data[c(rep(FALSE, 48), rep(TRUE, nrow(data_24_lag))), lag_24], xreg=data_24_lag_mat, seasonal=F, trace=T, stepwise=F, approximation=F)
+```
+
+```{r}
+fitted_arimax
+```
+
+Both models use 1 Autoregressive term, 1 Moving Average term, and no differencing is performed by auto.arima.  
+
+Addition of weather regressor data did not help much, only a small decrease in the AIC, AICc, BIC metrics.
