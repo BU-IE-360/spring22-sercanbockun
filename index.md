@@ -16,5 +16,13 @@ Link for the HW2 html file:
 
 
 
-### Homework 3
+### Project
 
+Link for the Project's Main Code:
+[html file](/Final_Project/Project_Code.html)
+
+Link for the Alternative Time Series Model's Code:
+[html2 file](/Final_Project/Time_Series_Analysis.html)
+
+Link for the Project Report:
+[pdf file](https://github.com/BU-IE-360/spring22-sercanbockun/blob/gh-pages/Final_Project/IE360_Project_Report.pdf)
